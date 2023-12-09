@@ -1,0 +1,203 @@
+---
+title: "Week3Project"
+author: "S. bellamkonda"
+date: "2023-11-29"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r load-packages, include=FALSE}
+library(tidyverse)
+library(lubridate)
+```
+
+
+## Week3 Project
+### load data
+```{r load_data, include=FALSE}
+uid_lookup_url <- "https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD"
+NYPD_Data <- read_csv(uid_lookup_url)
+
+```
+```{r}
+head(NYPD_Data)
+
+```
+
+
+### tidy datasets
+```{r tidy_data}
+# Find all column names
+colnames(NYPD_Data)
+# Remove following col names
+#    PRECINCT, JURISDICTION_CODE, "LOC_OF_OCCUR_DESC", "LOC_CLASSFCTN_DESC",  
+#    "LOCATION_DESC", X_COORD_CD, Y_COORD_CD, Lon_Lat
+# Replace NA with "Unkown" where applicable
+#    PERP_AGE_GROUP, PERP_SEX, PERP_RACE
+# Remove Data that looks weird
+#    PERP_AGE_GROUP
+
+# Select
+NYPD_Data <- NYPD_Data %>%
+    select("INCIDENT_KEY", "OCCUR_DATE", "OCCUR_TIME", 
+           "BORO", "STATISTICAL_MURDER_FLAG", 
+           "PERP_AGE_GROUP", "PERP_SEX", "PERP_RACE", 
+           "VIC_AGE_GROUP", "VIC_SEX", "VIC_RACE", 
+           "Latitude", "Longitude"
+           )
+
+# find Na
+lapply(NYPD_Data, function(x) sum(is.na(x)))
+
+# replace or remove na or weird data
+NYPD_Data <- NYPD_Data %>%
+    replace_na(list(PERP_AGE_GROUP = "Unknown", PERP_SEX = "Unknown", 
+                    PERP_RACE = "Unknown"))
+
+NYPD_Data <- subset(NYPD_Data, PERP_AGE_GROUP!="1020" &
+                      PERP_AGE_GROUP != "224" &
+                      PERP_AGE_GROUP != "940")
+
+NYPD_Data <- subset(NYPD_Data, VIC_AGE_GROUP!="1022")
+
+```
+
+
+### transform datasets
+```{r transform_data}
+# Convert data to char or factor as needed
+
+NYPD_Data$PERP_AGE_GROUP = recode(NYPD_Data$PERP_AGE_GROUP, UNKNOWN = "Unknown")
+NYPD_Data$PERP_SEX = recode(NYPD_Data$PERP_SEX, U = "Unknown")
+NYPD_Data$PERP_RACE = recode(NYPD_Data$PERP_RACE, UNKNOWN = "Unknown")
+NYPD_Data$VIC_SEX   = recode(NYPD_Data$VIC_SEX, U = "Unknown")
+NYPD_Data$VIC_RACE   = recode(NYPD_Data$VIC_RACE, UNKNOWN = "Unknown")
+NYPD_Data$INCIDENT_KEY = as.character(NYPD_Data$INCIDENT_KEY)
+NYPD_Data$BORO = as.factor(NYPD_Data$BORO)
+NYPD_Data$PERP_AGE_GROUP = as.factor(NYPD_Data$PERP_AGE_GROUP)
+NYPD_Data$PERP_SEX = as.factor(NYPD_Data$PERP_SEX)
+NYPD_Data$PERP_RACE = as.factor(NYPD_Data$PERP_RACE)
+NYPD_Data$VIC_AGE_GROUP = as.factor(NYPD_Data$VIC_AGE_GROUP)
+NYPD_Data$VIC_SEX = as.factor(NYPD_Data$VIC_SEX)
+NYPD_Data$VIC_RACE = as.factor(NYPD_Data$VIC_RACE)
+
+NYPD_Data <- NYPD_Data %>%
+    mutate(OCCUR_DATE = mdy(OCCUR_DATE))
+
+NYPD_Data <- NYPD_Data %>%
+    mutate(year = year(OCCUR_DATE))
+
+# summary
+summary(NYPD_Data)
+
+# unique data for each col
+# lapply(NYPD_Data, function(x) unique(x))
+
+```
+
+
+### visualizing data
+```{r visualization}
+# BOROs where crime is high
+NYPD_Data %>%
+    ggplot(aes(x = BORO)) +
+    geom_bar() +  
+    theme(legend.position = "bottom",
+          axis.text.x = element_text(angle = 90)) +
+    labs(title = "Total Incidents in BOROs 2006 - 2022", y = NULL)
+
+# Group crime by year and find crime trajectory
+NYPD_Crime_by_year <- NYPD_Data %>%
+    mutate(year = year(OCCUR_DATE))
+
+NYPD_Crime_by_year <- NYPD_Crime_by_year %>%
+    group_by(year) %>%
+    select(year, everything()) %>%
+    ungroup()
+
+NYPD_Crime_by_year %>%
+    ggplot(aes(x = year)) +
+    geom_bar() +  
+    theme(legend.position = "bottom",
+          axis.text.x = element_text(angle = 90)) +
+    labs(title = "Crime in NYC From 2006 - 2022", y = NULL)
+
+# Group murder by year and find trajectory
+NYPD_Murder_Data <- NYPD_Data %>%
+    group_by(year, BORO, STATISTICAL_MURDER_FLAG) %>%
+    summarize(total = sum(STATISTICAL_MURDER_FLAG == TRUE)) %>%
+    select(year, BORO, total) %>%
+    ungroup()
+
+NYPD_Murder_Data <- NYPD_Murder_Data %>%
+    filter(total > 0)
+
+NYPD_Murder_Data <- NYPD_Murder_Data %>%
+    group_by(year) %>%
+    summarize(total = sum(total)) %>%
+    select(year, total) %>%
+    ungroup()
+  
+NYPD_Murder_Data %>%
+  ggplot(aes(x = year, y = total)) +
+    geom_line(aes(color = "total")) +
+    geom_point(aes(color = "total")) + 
+    theme(legend.position = "bottom",
+          axis.text.x = element_text(angle = 90)) +
+    labs(title = "Murders in NYC 2006 - 2022", y = NULL)
+
+```
+
+
+### analyzing data
+#### Observations
+ - We see that most crimes are done by Males and most victims are males.
+ - Observation from summary shows that most crimes are committed 
+   - by perps in 18 - 44 age group
+   - against victims in 18 - 44 age group
+ - Also crime has been steadily decrasing since 2006 till 2019
+   - Crime spiked in 2020 and 2021 and it has declined in 2022
+   - This trend is show in the murders committed in that time frame as well
+ - Race with most victims and most perps is shown as Black Americans
+```{r analyzing_data}
+
+# age group
+table(NYPD_Data$PERP_AGE_GROUP, NYPD_Data$VIC_AGE_GROUP)
+
+# sex
+table(NYPD_Data$PERP_SEX, NYPD_Data$VIC_SEX)
+
+# Race
+table(NYPD_Data$PERP_RACE, NYPD_Data$VIC_RACE)
+
+```
+
+
+### modeling data
+#### R models
+ - 2 basic models are considered for this data and have decided to use glm
+   - lm 
+     - is used on continuous dependent data
+   - glm
+     - is used on categorical dependent data
+```{r modeling_Data}
+glm.fit <- glm(STATISTICAL_MURDER_FLAG ~ PERP_RACE + PERP_SEX + PERP_AGE_GROUP,
+               data = NYPD_Data, family = binomial)
+summary(glm.fit)
+
+```
+
+
+### bias sources
+#### Observation
+- Based on the data one can get biased against Black Americans, data shows that crime is committed largely by Black Americans. However we do not have information about how many of the incidents were reported correctly with the correct race.
+```{r bias_sources}
+
+```
+
